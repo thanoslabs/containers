@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for sensitive files
+        run: |
+          # Fail if .env, secrets, or private keys are committed
+          if git grep -l "\.env\|PRIVATE_KEY\|AWS_SECRET" --cached 2>/dev/null; then
+            echo "Error: sensitive files committed"
+            exit 1
+          fi
+
+      - name: Validate YAML files
+        run: |
+          for f in $(find . -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules); do
+            python3 -c "import yaml, sys; yaml.safe_load(open('$f'))" 2>/dev/null || echo "Invalid YAML: $f"
+          done
+
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.changed.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Find changed images
+        id: changed
+        run: |
+          images="$(.github/scripts/changed-images.sh \
+            "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")"
+          echo "images=${images}" >> "${GITHUB_OUTPUT}"
+          echo "changed images: ${images}"
+
+  # Build (never push) only the images this PR touches; release.yaml
+  # publishes them once the PR merges.
+  build:
+    needs: changes
+    if: needs.changes.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: images/${{ matrix.image }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

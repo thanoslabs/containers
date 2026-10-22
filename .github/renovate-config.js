@@ -3,6 +3,5 @@ module.exports = {
   branchPrefix: 'renovate/',
   dependencyDashboardTitle: 'Dependency Dashboard',
   onboarding: true,
-  onboardingBranch: 'renovate/configure',
-  repositories: ['j6nca/template']
+  onboardingBranch: 'renovate/configure'
 };
