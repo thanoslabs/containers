@@ -1,0 +1,180 @@
+name: Release
+
+# Each image under images/<name>/ is versioned and released on its own. A merge
+# to main releases only the images whose directory it changed; anything else
+# (docs, workflows, README) releases nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "images/**"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image to release (directory name under images/)"
+        required: true
+        type: string
+      version:
+        description: "Explicit version to release (bare X.Y.Z, e.g. 1.2.3). Omit to derive the next version from PR labels."
+        required: false
+        type: string
+
+# Needed to push the release tags, create the GitHub releases, and push images.
+permissions:
+  contents: write
+  packages: write
+
+# Serialize releases so back-to-back merges to main don't race on tag creation.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      releases: ${{ steps.plan.outputs.releases }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0 # full history + existing tags are required to compute the next version
+
+      - name: Plan releases
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_IMAGE: ${{ github.event.inputs.image }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ ! -f "images/${INPUT_IMAGE}/Dockerfile" ]]; then
+              echo "::error::No Dockerfile at images/${INPUT_IMAGE}/"
+              exit 1
+            fi
+            IMAGES="$(jq -nc --arg i "${INPUT_IMAGE}" '[$i]')"
+          else
+            IMAGES="$(.github/scripts/changed-images.sh "${BEFORE}" "${GITHUB_SHA}")"
+          fi
+          echo "images: ${IMAGES}"
+
+          # Bump level comes from the merged PR's labels, shared by every image
+          # it touched. 'major' takes precedence over 'minor'; anything else
+          # (or no PR) -> patch.
+          LABELS="$(gh api --jq 'if length > 0 then [.[0].labels[].name] | join(",") else "" end' \
+            "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" 2>/dev/null || true)"
+          LEVEL="patch"
+          if [[ ",${LABELS}," == *",major,"* ]]; then
+            LEVEL="major"
+          elif [[ ",${LABELS}," == *",minor,"* ]]; then
+            LEVEL="minor"
+          fi
+
+          RELEASES="[]"
+          for IMAGE in $(jq -r '.[]' <<< "${IMAGES}"); do
+            # Versions are per image: git tags are <image>/X.Y.Z, image tags
+            # stay bare X.Y.Z.
+            PREVIOUS="$(git tag --list "${IMAGE}/*" | sed "s|^${IMAGE}/||" \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+            if [[ -n "${INPUT_VERSION:-}" ]]; then
+              if [[ ! "${INPUT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "::error::Version must be bare SemVer (X.Y.Z, no 'v' prefix), got '${INPUT_VERSION}'"
+                exit 1
+              fi
+              VERSION="${INPUT_VERSION}"
+            else
+              IFS='.' read -r MAJOR MINOR PATCH <<< "${PREVIOUS:-0.0.0}"
+              case "${LEVEL}" in
+                major) VERSION="$((MAJOR + 1)).0.0" ;;
+                minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+                patch) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+              esac
+            fi
+            if git rev-parse -q --verify "refs/tags/${IMAGE}/${VERSION}" >/dev/null; then
+              echo "::error::Tag '${IMAGE}/${VERSION}' already exists"
+              exit 1
+            fi
+            echo "${IMAGE}: labels=[${LABELS:-none}] bump=${LEVEL} version=${VERSION}"
+            RELEASES="$(jq -c --arg i "${IMAGE}" --arg v "${VERSION}" --arg p "${PREVIOUS:+${IMAGE}/${PREVIOUS}}" \
+              '. + [{image: $i, version: $v, previous: $p}]' <<< "${RELEASES}")"
+          done
+
+          echo "releases=${RELEASES}" >> "${GITHUB_OUTPUT}"
+
+  release:
+    needs: plan
+    if: needs.plan.outputs.releases != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.releases) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: images/${{ matrix.image }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ matrix.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ matrix.version }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # Tag only after the image is pushed, so a failed build leaves no
+      # release behind and can simply be re-run.
+      - name: Tag release
+        env:
+          TAG: ${{ matrix.image }}/${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+      # NOTE: pushes/creations made with the default GITHUB_TOKEN do NOT trigger
+      # other workflows (e.g. on: push of tags, on: release). If release events
+      # must fan out to further automation, use a PAT or a GitHub App token
+      # (see actions/create-github-app-token in the Renovate workflow).
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.image }}/${{ matrix.version }}
+          PREVIOUS: ${{ matrix.previous }}
+          REF: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ matrix.version }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # Diff notes against this image's own previous release, not the
+          # repo's latest tag, which may belong to another image.
+          args=()
+          if [[ -n "${PREVIOUS}" ]]; then
+            args+=(--notes-start-tag "${PREVIOUS}")
+          fi
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes "\`${REF}\`" \
+            --generate-notes \
+            "${args[@]}"

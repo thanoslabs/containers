@@ -10,9 +10,28 @@
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
   "enabledManagers": [
-    "docker-compose"
+    "asdf",
+    "custom.regex",
+    "dockerfile",
+    "github-actions"
   ],
   "packageRules": [
+    {
+      "matchManagers": [
+        "asdf"
+      ],
+      "commitMessageTopic": "tool {{depName}}",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "tools",
+      "addLabels": [
+        "tools"
+      ]
+    },
     {
       "matchDatasources": [
         "docker"
@@ -28,6 +47,33 @@
       "bumpVersion": "patch",
       "addLabels": [
         "docker"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "git-refs"
+      ],
+      "commitMessageTopic": "upstream {{depName}}",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "upstream",
+      "addLabels": [
+        "upstream"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "github-actions"
+      ],
+      "commitMessageTopic": "github action {{depName}}",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "ci",
+      "addLabels": [
+        "ci"
       ]
     },
     {
@@ -57,5 +103,18 @@
   ],
   "labels": [
     "renovate"
-  ]
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Upstream source commits pinned as ARGs in image Dockerfiles",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)\\nARG \\S+=(?<currentDigest>[a-f0-9]{40})"
+      ]
+    }
+  ],
+  "pinDigests": true
 }
