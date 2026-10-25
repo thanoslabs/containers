@@ -28,7 +28,7 @@ RUN set -eux; \
     curl -fsSL "https://github.com/jdx/mise/releases/download/${MISE_VERSION}/mise-${MISE_VERSION}-${arch}.tar.xz" -o /tmp/mise.tar.xz; \
     mkdir -p /tmp/mise-unpack; \
     tar -xJf /tmp/mise.tar.xz -C /tmp/mise-unpack; \
-    install -m 0755 /tmp/mise-unpack/mise /usr/local/bin/mise; \
+    install -m 0755 /tmp/mise-unpack/bin/mise /usr/local/bin/mise; \
     rm -rf /tmp/mise.tar.xz /tmp/mise-unpack
 
 ENV PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
