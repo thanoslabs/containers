@@ -14,7 +14,7 @@ Container images built and published by `thanoslabs`, mostly for software whose 
 
 | Image | Upstream | Description |
 | ----- | -------- | ----------- |
-| [`paseo-relay`](images/paseo-relay/Dockerfile) | [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) | End-to-end encrypted relay for Paseo clients and daemons. Non-root, read-only-root friendly. |
+| [`paseo`](images/paseo/Dockerfile) | [getpaseo/paseo](https://github.com/getpaseo/paseo) | Paseo daemon with pinned Codex, Pi, and GitOps tooling. |\n| [`paseo-relay`](images/paseo-relay/Dockerfile) | [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) | End-to-end encrypted relay for Paseo clients and daemons. Non-root, read-only-root friendly. |
 
 Find versions and digests on each image's [GitHub releases](https://github.com/thanoslabs/containers/releases) (tagged `<name>/X.Y.Z`). Pin by digest:
 
