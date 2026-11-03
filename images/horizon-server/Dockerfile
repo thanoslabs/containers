@@ -4,7 +4,7 @@
 # renovate: datasource=git-refs depName=https://github.com/horizon-rust/horizon branch=main
 ARG HORIZON_REF=31f83499b6c2cff7a8e7bf45f8173a7a95c2767c
 
-FROM rust:1.90-slim-bookworm AS build
+FROM rust:1.95-slim-bookworm AS build
 ARG HORIZON_REF
 WORKDIR /src
 ADD https://github.com/horizon-rust/horizon.git#${HORIZON_REF} /src
