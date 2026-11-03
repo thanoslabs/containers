@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Horizon's dedicated Minecraft Java Edition server, based on upstream packaging/server/Dockerfile.
+# Horizon's dedicated headless Minecraft Java Edition server.
 # The build deliberately contains no proprietary Minecraft game data.
 # renovate: datasource=git-refs depName=https://github.com/horizon-rust/horizon branch=main
 ARG HORIZON_REF=31f83499b6c2cff7a8e7bf45f8173a7a95c2767c
@@ -8,10 +8,8 @@ FROM rust:1.95-slim-bookworm AS build
 ARG HORIZON_REF
 WORKDIR /src
 ADD https://github.com/horizon-rust/horizon.git#${HORIZON_REF} /src
-RUN cargo build --release --locked -p horizon-client --no-default-features --bin horizon-client \
- && cargo build --release --locked -p horizon-server --bin horizon-server \
+RUN cargo build --release --locked -p horizon-server --bin horizon-server \
  && mkdir /out \
- && cp target/release/horizon-client /out/horizon-engine \
  && cp target/release/horizon-server /out/horizon-server
 
 FROM debian:bookworm-slim

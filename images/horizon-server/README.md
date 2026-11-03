@@ -1,6 +1,6 @@
 # Horizon Minecraft server image
 
-This image packages the open-source Horizon Minecraft Java Edition server and its native game engine.
+This image packages only the open-source Horizon Minecraft Java Edition dedicated server executable. Resource preparation and Java 25 are provided by the separate `horizon-prepare` image.
 
 - Image: `ghcr.io/thanoslabs/horizon-server`
 - Port: TCP 25565
@@ -11,7 +11,7 @@ This image packages the open-source Horizon Minecraft Java Edition server and it
 
 ## Proprietary game files
 
-This image **does not** distribute Minecraft game files. Prepare Minecraft Java Edition 26.3 resources on a machine with a legitimate installation using Horizon's `horizon-prepare` instructions, then mount the prepared folder read-only at `/opt/horizon/.local/horizon-client/26.3`. Consult [upstream hosting guidance](https://github.com/horizon-rust/horizon/blob/main/docs/hosting.md).
+This image **does not** distribute Minecraft game files. Prepare Minecraft Java Edition 26.3 resources with the separate `ghcr.io/thanoslabs/horizon-prepare` image and the required game inputs, then mount the prepared folder read-only at `/opt/horizon/.local/horizon-client/26.3`. Consult [upstream hosting guidance](https://github.com/horizon-rust/horizon/blob/main/docs/hosting.md).
 
 ## First startup
 
