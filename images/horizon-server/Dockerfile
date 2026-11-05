@@ -2,7 +2,7 @@
 # Horizon's dedicated headless Minecraft Java Edition server.
 # The build deliberately contains no proprietary Minecraft game data.
 # renovate: datasource=git-refs depName=https://github.com/horizon-rust/horizon branch=main
-ARG HORIZON_REF=31f83499b6c2cff7a8e7bf45f8173a7a95c2767c
+ARG HORIZON_REF=fb6121bce9fa724c2c28b1c4c0747cd70b93dc9d
 
 FROM rust:1.95-slim-bookworm AS build
 ARG HORIZON_REF
